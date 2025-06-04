@@ -1,8 +1,9 @@
 `timescale 1ns/1ps
 
 module spi_matrix_loader #(
-    parameter MAX_A = 64,
-    parameter MAX_B = 64
+    parameter MAX_M = 784, // Maximum number of rows in matrix A
+    parameter MAX_K = 288,   // Maximum number of columns in matrix A / rows in matrix B
+    parameter MAX_N = 64    // Maximum number of columns in matrix B
 )(
     input  wire        clk,
     input  wire        rst_n,
@@ -14,8 +15,8 @@ module spi_matrix_loader #(
     output wire        miso,
 
     // Outputs
-    output reg  [31:0] matrix_A [0:MAX_A-1],
-    output reg  [31:0] matrix_B [0:MAX_B-1],
+    output reg  [31:0] matrix_A [0:MAX_M*MAX_K-1],
+    output reg  [31:0] matrix_B [0:MAX_K*MAX_N-1],
     output reg         matrix_A_ready,
     output reg         matrix_B_ready
 );
