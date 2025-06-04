@@ -58,7 +58,7 @@ async def matrixmul_spi_test(dut):
     for word in A_flat:
         await spi_send_word(dut, word)
 
-    for _ in range(20000000):
+    for _ in range(200000):
         await RisingEdge(dut.clk)
         if dut.A_loaded.value.integer == 1:
             dut._log.info("Matrix A loaded.")
@@ -69,7 +69,7 @@ async def matrixmul_spi_test(dut):
     for word in B_flat:
         await spi_send_word(dut, word)
 
-    for _ in range(20000000):
+    for _ in range(200000):
         await RisingEdge(dut.clk)
         if dut.B_loaded.value.integer == 1:
             dut._log.info("Matrix B loaded.")
@@ -77,7 +77,7 @@ async def matrixmul_spi_test(dut):
 
     # --- Wait for matrix multiplication to complete ---
     dut._log.info("Waiting for mul_done...")
-    for _ in range(20000000):
+    for _ in range(200000):
         await RisingEdge(dut.clk)
         if dut.mul_done.value.integer == 1:
             dut._log.info("Matrix multiplication complete.")

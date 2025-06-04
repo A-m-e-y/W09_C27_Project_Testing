@@ -1,8 +1,8 @@
 `timescale 1ns/1ps
 
 module spi_matrix_sender #(
-    parameter MAX_M = 784,
-    parameter MAX_N = 64
+    parameter MAX_M = 10,
+    parameter MAX_N = 10
 )(
     input  wire        clk,
     input  wire        rst_n,
@@ -16,11 +16,11 @@ module spi_matrix_sender #(
     // Control
     input  wire        start_tx,
     input  wire [31:0] matrix_C [0:MAX_M*MAX_N-1],
-    input  wire [15:0] C_size,   // total number of words to send
+    input  wire [15:0] C_size,
     output reg         done_tx
 );
 
-    // SPI slave interface
+    // SPI slave instance
     wire [31:0] rx_data;
     wire        rx_valid;
     wire        rx_ready = 1'b0;
@@ -45,39 +45,64 @@ module spi_matrix_sender #(
     );
 
     // FSM states
-    localparam IDLE      = 0,
-               SEND_DATA = 1,
-               DONE      = 2;
+    typedef enum logic [2:0] {
+        IDLE       = 3'b000,
+        WAIT_CS_LOW = 3'b001,
+        PULSE_VALID = 3'b010,
+        WAIT_READY  = 3'b011,
+        WAIT_CS_HIGH = 3'b100,
+        DONE       = 3'b101
+    } state_t;
 
-    reg [1:0] state;
+    state_t state;
     reg [15:0] send_index;
 
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             state      <= IDLE;
-            tx_data    <= 32'd0;
-            tx_valid   <= 0;
             send_index <= 0;
+            tx_data    <= 0;
+            tx_valid   <= 0;
             done_tx    <= 0;
         end else begin
-            tx_valid <= 0;
             case (state)
                 IDLE: begin
-                    done_tx <= 0;
+                    tx_valid <= 0;
+                    done_tx  <= 0;
                     if (start_tx) begin
                         send_index <= 0;
-                        tx_valid <= 1;
-                        state <= SEND_DATA;
+                        tx_data <= matrix_C[0];
+                        state <= WAIT_CS_LOW;
                     end
                 end
 
-                SEND_DATA: begin
+                WAIT_CS_LOW: begin
+                    tx_valid <= 0;
+                    if (cs_n == 0) begin
+                        state <= PULSE_VALID;
+                    end
+                end
+
+                PULSE_VALID: begin
+                    tx_valid <= 1;
+                    state <= WAIT_READY;
+                end
+
+                WAIT_READY: begin
                     if (tx_ready) begin
-                        tx_data <= matrix_C[send_index];
-                        tx_valid <= 1;
+                        tx_valid <= 0; // drop valid after tx_ready pulse
+                        state <= WAIT_CS_HIGH;
+                    end
+                end
+
+                WAIT_CS_HIGH: begin
+                    if (cs_n == 1) begin
                         send_index <= send_index + 1;
-                        if (send_index == (C_size - 1)) begin
+                        if (send_index + 1 == C_size) begin
                             state <= DONE;
+                        end else begin
+                            tx_data <= matrix_C[send_index + 1];
+                            state <= WAIT_CS_LOW;
                         end
                     end
                 end

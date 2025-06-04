@@ -73,12 +73,12 @@ module spi_matrix_loader #(
                 IDLE: begin
                     if (rx_valid) begin
                         // Parse header
-                        case (rx_data[31:24])
-                            8'h0A: begin
+                        case (rx_data[27:24])
+                            4'hA: begin
                                 current_matrix <= 0;
                                 matrix_A_ready <= 0;
                             end
-                            8'h0B: begin
+                            4'hB: begin
                                 current_matrix <= 1;
                                 matrix_B_ready <= 0;
                             end
