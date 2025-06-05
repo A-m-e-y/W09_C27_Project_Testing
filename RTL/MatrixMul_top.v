@@ -28,6 +28,10 @@ module MatrixMul_top #(
     wire [31:0] matrix_C [0:MAX_M*MAX_N-1];
     wire A_loaded, B_loaded;
 
+    reg [15:0] c_size; // Size of matrix C, calculated as M * N
+
+    assign c_size = M_in * N_in;
+
     spi_matrix_loader #(
         .MAX_M(MAX_M),
         .MAX_K(MAX_K),
@@ -38,7 +42,7 @@ module MatrixMul_top #(
         .sclk(sclk), // Assuming Serial_in[0] is SCLK
         .mosi(mosi), // Assuming Serial_in[1] is MOSI
         .cs_n(cs_n), // Assuming Serial_in[2] is CS_N
-        .miso(miso),   // MISO output
+        // .miso(miso),   // MISO output
         .matrix_A(matrix_A),
         .matrix_B(matrix_B),
         .matrix_A_ready(A_loaded), // Ready signal for matrix A
@@ -68,8 +72,10 @@ module MatrixMul_top #(
     ) spi_sender (
         .clk(clk),
         .rst_n(rst_n),
+        .C_size(c_size), // Assuming C_size is M * N
         .sclk(sclk), // Assuming Serial_in[0] is SCLK
-        .mosi(mosi), // Assuming Serial_in[1] is MOSI
+        // .mosi(mosi), // Assuming Serial_in[1] is MOSI
+        .miso(miso), // MISO output
         .cs_n(cs_n), // Assuming Serial_in[2] is CS_N
         .start_tx(send_c),
         .matrix_C(matrix_C),

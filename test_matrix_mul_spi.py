@@ -22,7 +22,7 @@ async def matrixmul_spi_test(dut):
     await RisingEdge(dut.clk)
 
     # Test size: small for verification
-    M, K, N = 4, 4, 4
+    M, K, N = 10, 10, 10
     dut.M_in.value = M
     dut.K_in.value = K
     dut.N_in.value = N
@@ -41,8 +41,11 @@ async def matrixmul_spi_test(dut):
         return (tag << 24) | ((rows & 0xFFF) << 12) | (cols & 0xFFF)
 
     # --- Prepare data ---
-    matrix_A = [[random.uniform(-2, 2) for _ in range(K)] for _ in range(M)]
-    matrix_B = [[random.uniform(-2, 2) for _ in range(N)] for _ in range(K)]
+    matrix_A = [[random.uniform(-1, 1) for _ in range(K)] for _ in range(M)]
+    matrix_B = [[random.uniform(-1, 1) for _ in range(N)] for _ in range(K)]
+
+    # matrix_A = [[-0.36741, -0.73356], [0.49609, 0.17082]]
+    # matrix_B = [[-0.75855, 0.12771], [0.84804, -0.66840]]
 
     # Compute golden C in software
     def matmul(A, B):
@@ -53,6 +56,9 @@ async def matrixmul_spi_test(dut):
     A_flat = [float_to_hex(x) for row in matrix_A for x in row]
     B_flat = [float_to_hex(x) for row in matrix_B for x in row]
 
+    for i, val in enumerate(A_flat):
+        dut._log.info(f"[INFO] A[{i}] = {val:08x} = {hex_to_float(val):.5f}")
+    
     # --- Send A ---
     await spi_send_word(dut, encode_word_as_int(make_header(0x0A, M, K)))
     for word in A_flat:
@@ -64,6 +70,9 @@ async def matrixmul_spi_test(dut):
             dut._log.info("Matrix A loaded.")
             break
 
+    for i, val in enumerate(B_flat):
+        dut._log.info(f"[INFO] B[{i}] = {val:08x} = {hex_to_float(val):.5f}")
+   
     # --- Send B ---
     await spi_send_word(dut, encode_word_as_int(make_header(0x0B, K, N)))
     for word in B_flat:
@@ -100,6 +109,7 @@ async def matrixmul_spi_test(dut):
         for j in range(N):
             expected = matrix_C_golden[i][j]
             received = received_C[i * N + j]
+            dut._log.info(f"[INFO] C[{i}][{j}] = {float_to_hex(received):08x}, expected {float_to_hex(expected):08x}")
             if abs(expected - received) > 1e-3:
                 dut._log.error(f"[FAIL] C[{i}][{j}] = {received:.5f}, expected {expected:.5f}")
                 passed = False
@@ -113,7 +123,11 @@ async def matrixmul_spi_test(dut):
 # --- SPI helpers ---
 async def spi_send_word(dut, data):
     dut.cs_n.value = 0
-    await Timer(20, units="ns")
+    dut.mosi.value = 0
+    dut.sclk.value = 0
+    await Timer(10, units="ns")
+    dut.sclk.value = 1
+    await Timer(10, units="ns")
     for i in range(32):
         bit = (data >> (31 - i)) & 1
         dut.mosi.value = bit
@@ -123,20 +137,32 @@ async def spi_send_word(dut, data):
         await Timer(10, units="ns")
     dut.sclk.value = 0
     dut.cs_n.value = 1
+    dut.mosi.value = 0
     await Timer(40, units="ns")
 
 
 async def spi_receive_word(dut):
+    """Simulate SPI master receive: clock bits and sample MISO."""
+    result = 0
     dut.cs_n.value = 0
-    await Timer(20, units="ns")
-    received = 0
+    await Timer(10, units="ns")
+
     for i in range(32):
         dut.sclk.value = 0
         await Timer(10, units="ns")
+
         dut.sclk.value = 1
-        received = (received << 1) | int(dut.miso.value)
         await Timer(10, units="ns")
+
+        await Timer(10, units="ns")
+        try:
+            bit = int(dut.miso.value)
+            result = (result << 1) | bit
+        except ValueError:
+            bit = 0
+            result = (result << 1) | bit
+
     dut.sclk.value = 0
     dut.cs_n.value = 1
     await Timer(40, units="ns")
-    return received
+    return result

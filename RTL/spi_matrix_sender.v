@@ -11,7 +11,7 @@ module spi_matrix_sender #(
     input  wire        sclk,
     input  wire        mosi,
     input  wire        cs_n,
-    output wire        miso,
+    output reg        miso,
 
     // Control
     input  wire        start_tx,

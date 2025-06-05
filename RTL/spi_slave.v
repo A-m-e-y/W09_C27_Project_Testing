@@ -21,6 +21,7 @@ module spi_slave (
     reg [31:0] shift_reg_rx;
     reg [31:0] shift_reg_tx;
     reg sclk_d, sclk_prev;
+    reg captured;
 
     wire sclk_rising  = (sclk == 1'b1 && sclk_prev == 1'b0);
     wire sclk_falling = (sclk == 1'b0 && sclk_prev == 1'b1);
@@ -36,6 +37,7 @@ module spi_slave (
             miso         <= 0;
             sclk_d       <= 0;
             sclk_prev    <= 0;
+            captured     <= 0;
         end else begin
             sclk_d    <= sclk;
             sclk_prev <= sclk_d;
@@ -45,9 +47,12 @@ module spi_slave (
                 if (sclk_rising) begin
                     shift_reg_rx <= {shift_reg_rx[30:0], mosi};
                     bit_cnt <= bit_cnt + 1;
+                    captured <= 1;
+                end else begin
+                    captured <= 0;
                 end
 
-                if (bit_cnt == 6'd31) begin
+                if (bit_cnt == 6'd32) begin
                     bit_cnt  <= 0;
                     rx_data  <= shift_reg_rx;
                     rx_valid <= 1;
@@ -73,6 +78,7 @@ module spi_slave (
                 rx_valid  <= 0;
                 tx_ready  <= 0;
                 miso      <= 0;
+                captured <= 0;
             end
         end
     end

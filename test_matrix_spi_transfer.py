@@ -29,6 +29,9 @@ async def spi_matrix_loader_test(dut):
     def float_to_hex(f):
         return struct.unpack('<I', struct.pack('<f', f))[0]
 
+    def hex_to_float(h):
+        return struct.unpack('<f', struct.pack('<I', h))[0]
+
     def encode_word_as_int(f):
         return struct.unpack('<I', struct.pack('<I', f))[0]
 
@@ -49,11 +52,17 @@ async def spi_matrix_loader_test(dut):
     for word in A_flat:
         await spi_send_word(dut, word)
 
+    for i, val in enumerate(A_flat):
+        dut._log.info(f"[INFO] A[{i}] = {val:08x} = {hex_to_float(val):.5f}")
+
     # --- Send matrix B ---
     header_B = make_header(0x0B, K, N)
     await spi_send_word(dut, encode_word_as_int(header_B))
     for word in B_flat:
         await spi_send_word(dut, word)
+
+    for i, val in enumerate(B_flat):
+        dut._log.info(f"[INFO] B[{i}] = {val:08x} = {hex_to_float(val):.5f}")
 
     await Timer(1000, units="ns")
     dut._log.info("Finished sending large matrices A (784x288) and B (288x64) over SPI.")
@@ -63,7 +72,7 @@ async def spi_matrix_loader_test(dut):
 async def spi_send_word(dut, data):
     """Bit-bang one 32-bit word into the DUT over SPI."""
     dut.cs_n.value = 0
-    await Timer(20, units="ns")
+    await Timer(10, units="ns")
 
     for i in range(32):
         bit = (data >> (31 - i)) & 1
