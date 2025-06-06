@@ -8,25 +8,6 @@ import random
 async def matrixmul_spi_test(dut):
     """Test full SPI roundtrip: load A & B, wait for C, fetch C over SPI, compare."""
 
-    cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())
-    await Timer(100, units="ns")
-
-    # Reset DUT
-    dut.rst_n.value = 0
-    dut.cs_n.value = 1
-    dut.sclk.value = 0
-    dut.mosi.value = 0
-    dut.send_c.value = 0
-    await Timer(100, units="ns")
-    dut.rst_n.value = 1
-    await RisingEdge(dut.clk)
-
-    # Test size: small for verification
-    M, K, N = 10, 10, 10
-    dut.M_in.value = M
-    dut.K_in.value = K
-    dut.N_in.value = N
-
     # --- Helper functions ---
     def float_to_hex(f):
         return struct.unpack('<I', struct.pack('<f', f))[0]
@@ -40,29 +21,43 @@ async def matrixmul_spi_test(dut):
     def make_header(tag, rows, cols):
         return (tag << 24) | ((rows & 0xFFF) << 12) | (cols & 0xFFF)
 
-    # --- Prepare data ---
-    matrix_A = [[random.uniform(-1, 1) for _ in range(K)] for _ in range(M)]
-    matrix_B = [[random.uniform(-1, 1) for _ in range(N)] for _ in range(K)]
 
-    # matrix_A = [[-0.36741, -0.73356], [0.49609, 0.17082]]
-    # matrix_B = [[-0.75855, 0.12771], [0.84804, -0.66840]]
+    cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())
+    await Timer(100, units="ns")
 
-    # Compute golden C in software
-    def matmul(A, B):
-        return [[sum(A[i][k] * B[k][j] for k in range(K)) for j in range(N)] for i in range(M)]
+    # Load matrix info from input_buffer.txt
+    with open("input_buffer.txt", "r") as f:
+        lines = f.readlines()
 
-    matrix_C_golden = matmul(matrix_A, matrix_B)
+    M = int(lines[0].split()[1])
+    K = int(lines[1].split()[1])
+    N = int(lines[2].split()[1])
+    A_flat = list(map(float, lines[3].split()[1:]))
+    B_flat = list(map(float, lines[4].split()[1:]))
 
-    A_flat = [float_to_hex(x) for row in matrix_A for x in row]
-    B_flat = [float_to_hex(x) for row in matrix_B for x in row]
+    # Reset DUT
+    dut.rst_n.value = 0
+    dut.cs_n.value = 1
+    dut.sclk.value = 0
+    dut.mosi.value = 0
+    dut.send_c.value = 0
+    await Timer(100, units="ns")
+    dut.rst_n.value = 1
+    await RisingEdge(dut.clk)
 
-    for i, val in enumerate(A_flat):
-        dut._log.info(f"[INFO] A[{i}] = {val:08x} = {hex_to_float(val):.5f}")
-    
+    # Test size: small for verification
+    # M, K, N = 4, 4, 4
+    dut.M_in.value = M
+    dut.K_in.value = K
+    dut.N_in.value = N
+
+    # for i, val in enumerate(A_flat):
+    #     dut._log.info(f"[INFO] A[{i}] = {val:.5f} = {float_to_hex(val):08x}")
+
     # --- Send A ---
     await spi_send_word(dut, encode_word_as_int(make_header(0x0A, M, K)))
     for word in A_flat:
-        await spi_send_word(dut, word)
+        await spi_send_word(dut, float_to_hex(word))
 
     for _ in range(200000):
         await RisingEdge(dut.clk)
@@ -70,13 +65,13 @@ async def matrixmul_spi_test(dut):
             dut._log.info("Matrix A loaded.")
             break
 
-    for i, val in enumerate(B_flat):
-        dut._log.info(f"[INFO] B[{i}] = {val:08x} = {hex_to_float(val):.5f}")
-   
+    # for i, val in enumerate(B_flat):
+    #     dut._log.info(f"[INFO] B[{i}] = {val:.5f} = {float_to_hex(val):08x}")
+
     # --- Send B ---
     await spi_send_word(dut, encode_word_as_int(make_header(0x0B, K, N)))
     for word in B_flat:
-        await spi_send_word(dut, word)
+        await spi_send_word(dut, float_to_hex(word))
 
     for _ in range(200000):
         await RisingEdge(dut.clk)
@@ -103,22 +98,8 @@ async def matrixmul_spi_test(dut):
         word = await spi_receive_word(dut)
         received_C.append(hex_to_float(word))
 
-    # --- Compare results ---
-    passed = True
-    for i in range(M):
-        for j in range(N):
-            expected = matrix_C_golden[i][j]
-            received = received_C[i * N + j]
-            dut._log.info(f"[INFO] C[{i}][{j}] = {float_to_hex(received):08x}, expected {float_to_hex(expected):08x}")
-            if abs(expected - received) > 1e-3:
-                dut._log.error(f"[FAIL] C[{i}][{j}] = {received:.5f}, expected {expected:.5f}")
-                passed = False
-            else:
-                dut._log.info(f"[PASS] C[{i}][{j}] = {received:.5f}, OK")
-
-    assert passed, "Matrix C mismatch detected!"
-    dut._log.info("✅ Full SPI roundtrip test passed!")
-
+    with open("output_buffer.txt", "w") as f:
+        f.write("C " + " ".join(map(str, received_C)) + "\n")
 
 # --- SPI helpers ---
 async def spi_send_word(dut, data):
